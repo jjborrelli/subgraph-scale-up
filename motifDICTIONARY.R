@@ -208,38 +208,38 @@ for(i in 1:length(fournode)){
   m <- matrix(ncol = 2, nrow = nrow(fournode[[i]]))
   m[,1] <- fournode[[i]][,2]
   m[,2] <- fournode[[i]][,1]
-  
   fournode2[[i]] <- m
-  
 }
+rm(fournode)
 
-#fivenode <- list()
-#for(i in 1:500){
-#  connect = FALSE
-#  while(!connect){
-#    e <- sample(4:20, 1, prob = c(rep(.1, 7), rep(.03, 10)))
-#    fivenode[[i]] <- erdos.renyi.game(5, p.or.m = e, type = "gnm", directed = T)  
-#    
-#    comp <- c()
-#    for(j in 1:length(fivenode)){
-#      if(length(fivenode) == 1){break}
-#      if(j > 1){j <- j-1}
-#      test <- sum(get.adjacency(fivenode[[i]]) == get.adjacency(fivenode[[j]])) == 25
-#      comp <- c(comp, test)
-#    }
-#    if(sum(comp) >= 1){connect = FALSE}else{connect <- is.connected(fivenode[[i]])}
-#  }
-#  print(i)
-#}
-
+fivenode <- list()
+system.time(
+for(i in 1:750){
+  connect = FALSE
+  while(!connect){
+    e <- sample(4:20, 1, prob = c(rep(.1, 7), rep(.03, 10)))
+    fivenode[[i]] <- erdos.renyi.game(5, p.or.m = e, type = "gnm", directed = T)  
+    
+    comp <- c()
+    for(j in 1:length(fivenode)){
+      if(length(fivenode) == 1){break}
+      if(j > 1){j <- j-1}
+      test <- sum(get.adjacency(fivenode[[i]]) == get.adjacency(fivenode[[j]])) == 25
+      comp <- c(comp, test)
+    }
+    if(sum(comp) >= 1){connect = FALSE}else{connect <- is.connected(fivenode[[i]])}
+  }
+  print(i)
+}
+)
 
 # Convert adjacency lists into graph objects
-require(igraph)
-fournode.gr <- lapply(fournode, graph.edgelist)
+library(igraph)
+fournode.gr <- lapply(fournode2, graph.edgelist)
 
 # Create adjacency matrices
 fournode.am <- lapply(fournode.gr, get.adjacency, sparse = F)
-#fivenode.am <- lapply(fivenode, get.adjacency, sparse = F)
+fivenode.am <- lapply(fivenode, get.adjacency, sparse = F)
 
 # motif_counter function from "web_functions.R"
 motif_counter <- function(graph.lists){
@@ -264,11 +264,11 @@ motif_counter <- function(graph.lists){
 }
 
 # count motifs
-mot.4 <- motif_counter(fournode.gr)
-rownames(mot.4) <- names(fournode)
+mot4 <- motif_counter(fournode.gr)
+rownames(mot4) <- names(fournode2)
 
-#mot.5 <- motif_counter(fivenode, 1:301)
-#subcount.5 <- mot.5[,2:14]
+mot5 <- motif_counter(fivenode)
+
 
 # Stability analysis functions from "motifAnalysis.R"
 conversion <- function(tm){
@@ -282,7 +282,7 @@ conversion <- function(tm){
 
 ran.unif <- function(motmat){
   newmat <- apply(motmat, c(1,2), function(x){
-    if(x==1){runif(1, 0, 10)}else if(x==-1){runif(1, -1, 0)} else{0}
+    if(x==1){runif(1, 0, 5)}else if(x==-1){runif(1, -1, 0)} else{0}
   })
   diag(newmat) <- runif(nrow(newmat), -1, 0)
   return(newmat)
@@ -312,19 +312,16 @@ fourN.co <- lapply(fournode.am, conversion)
 system.time(
 emat <- eig.analysis(1000, fourN.co)
 )
+#2.33 min
 
-qss.4 <- apply(emat, 2, function(x){sum(x < 0)/length(x)})
-names(qss.4) <- names(fournode.am)
+qss4 <- apply(emat, 2, function(x){sum(x < 0)/length(x)})
+names(qss4) <- names(fournode.am)
 
-num.edges <- sapply(fournode.am, sum)
+n.edges4 <- sapply(fournode.am, sum)
 
-plot(qss.4[names(sort(num.edges))])
-table(num.edges)
+sub2 <- cbind(ned = n.edges4, mot4[,1:5], other = rowSums(mot4[,6:13]))
+sub2 <- mot.4
 
-
-results <- data.frame(edges = num.edges, qss = qss.4)
-
-sub2 <- cbind(mot.4[,1:5], other = rowSums(mot.4[,6:13]))
 
 m <- apply(sub2, 2, mean)
 s <- apply(sub2, 2, sd)
@@ -333,28 +330,28 @@ s <- apply(sub2, 2, sd)
 z <- (sub2 - m)/s
 
 z.test <-  as.matrix(z)
-fit <- glm(cbind(qss.4*1000, 1000-(qss.4*1000))~z.test, family = "binomial")
 
-results2 <- cbind(results, z)
-
+cmot4 <- as.matrix(cbind(ed = n.edges4, mot4[,1:5], neg = rowSums(mot4[,6:13])))
+summary(glm(cbind(1000*qss4, 1000-(1000*qss4))~cmot4-1, family = "binomial"))
 
 # five node stability
 fiveN.co <- lapply(fivenode.am, conversion)
 system.time(
   emat5 <- eig.analysis(1000, fiveN.co)
 )
+#9.1 min for 750 matrices
 
-qss.5 <- apply(emat5, 2, function(x){sum(x < 0)/length(x)})
+qss5 <- apply(emat5, 2, function(x){sum(x < 0)/length(x)})
 
 
-num.edges5 <- sapply(fivenode.am, sum)
+n.edges5 <- sapply(fivenode.am, sum)
 
 table(num.edges5)
 
 
 results5 <- data.frame(edges = num.edges5, qss = qss.5)
 
-sub5 <- cbind(subcount.5[,1:5], other = rowSums(subcount.5[,6:13]))
+sub5 <- cbind(mot.5[,1:5], other = rowSums(mot.5[,6:13]))
 
 m5 <- apply(sub5, 2, mean)
 s5 <- apply(sub5, 2, sd)
@@ -363,4 +360,51 @@ s5 <- apply(sub5, 2, sd)
 z5 <- (sub5 - m5)/s5
 
 z.test5 <-  as.matrix(z5)
-summary(glm(qss.5~z.test5, family = "quasibinomial"))
+cmot5 <- as.matrix(cbind(ed = n.edges5, mot5[,1:5], neg = rowSums(mot5[,6:13])))
+summary(glm(cbind(1000*qss5, 1000-(1000*qss5))~cmot5-1, family = "binomial"))
+
+
+# larger webs
+
+tens <- list()
+for(i in 1:200){
+  connect = FALSE
+  while(!connect){
+    con <- rbeta(1, 1, 3)
+    tens[[i]] <- erdos.renyi.game(10, p.or.m = con, type = "gnp", directed = T)  
+    
+    comp <- c()
+    for(j in 1:length(tens)){
+      if(length(tens) == 1){break}
+      if(j > 1){j <- j-1}
+      test <- sum(get.adjacency(tens[[i]]) == get.adjacency(tens[[j]])) == 100
+      comp <- c(comp, test)
+    }
+    if(sum(comp) >= 1){connect = FALSE}else{connect <- is.connected(tens[[i]])}
+  }
+  print(i)
+}
+
+
+mat10 <- lapply(tens, get.adjacency, sparse = F)
+ned <- sapply(mat10, sum)
+cmat10 <- lapply(mat10, conversion)
+
+
+system.time(
+  eig10 <- eig.analysis(1000, cmat10)
+)
+# 4.47 min for 200 matrices
+
+qss10 <- apply(eig10, 2, function(x){sum(x < 0)/length(x)})
+qss10
+
+mot10 <- motif_counter(tens)
+
+z10 <- (mot10 - colMeans(mot10))/apply(mot10, 2, sd)
+
+#cmot10 <- as.matrix(cbind(mot10[,1:5], neg = rowSums(mot10[,6:13])))
+cmot10 <- as.matrix(cbind(ed = ned, mot10[,1:5], neg = rowSums(mot10[,6:13])))
+cz10 <-  as.matrix(cbind(ed = ned, z10[,1:5], neg = rowSums(z10[,6:13])))
+
+summary(glm(cbind(1000*qss10, 1000-(1000*qss10))~cmot10-1, family = "binomial"))
