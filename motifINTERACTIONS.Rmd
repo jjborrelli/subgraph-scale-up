@@ -1,0 +1,31 @@
+---
+title: "Motif Interactions"
+author: "Jonathan J. Borrelli"
+date: "2015"
+output: 
+  html_document:
+    toc: yes
+    number_sections: yes
+---
+
+In my previous paper I showed that the 13 different three-node subgraphs differ in the probability that they  will be stable (quasi sign-stability). The three subgraphs that were most stable (tritrophic chains, apparent competition, and direct competition) are also the subgraphs that are most frequently observed in empirical food webs. 
+
+```{r echo = FALSE, fig.width = 3, fig.height = 1, fig.align = 'center'}
+library(igraph)
+
+s1<-matrix(c(0,1,0,-1,0,1,0,-1,0),nrow=3,ncol=3)
+s4<-matrix(c(0,1,1,-1,0,0,-1,0,0),nrow=3,ncol=3)
+s5<-matrix(c(0,0,1,0,0,1,-1,-1,0),nrow=3,ncol=3)
+
+s.ls <- list(s1, s4, s5)
+
+par(mfrow = c(1, 3), mar = c(.2, .2, .2, .2))
+for(i in 1:3){
+  plot.igraph(graph.adjacency(s.ls[[i]]), layout = layout.circle, edge.arrow.size = 1, 
+              vertex.size = 30, vertex.color = "black", vertex.label = NA, frame = T, edge.width = 2, edge.color = "darkslategray4")
+}
+```
+
+The next logical step is to try to understand how putting the three-node subgraphs together impacts their stability properties. While I suggested in the previous paper that systemic selection (via loss of unstable configurations) could lead to the observed pattern in empirical food webs I did not consider that the different subgraphs may interact to be more or less stable when combined. For example, some subgraphs that are less quasi sign-stable may be supported in food webs if they are embedded in webs that have more stable subgraphs. 
+
+To start 
