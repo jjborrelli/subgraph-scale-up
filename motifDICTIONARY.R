@@ -2,6 +2,66 @@ library(igraph)
 library(ggplot2)
 library(reshape2)
 
+
+# motif_counter function from "web_functions.R"
+motif_counter <- function(graph.lists){
+  require(igraph)
+  
+  if(!is.list(graph.lists)){
+    stop("The input should be a list of graph objects")
+  }
+  
+  triad.count <- lapply(graph.lists, triad.census)
+  triad.matrix <- matrix(unlist(triad.count), nrow = length(graph.lists), ncol = 16, byrow = T)
+  colnames(triad.matrix) <- c("empty", "single", "mutual", "s5", "s4", "s1", "d4",
+                              "d3", "s2", "s3","d8", "d2", "d1", "d5", "d7", "d6")
+  
+  triad.df <- as.data.frame(triad.matrix)
+  
+  motif.data.frame <- data.frame(s1 = triad.df$s1, s2 = triad.df$s2, s3 = triad.df$s3, s4 = triad.df$s4, 
+                                 s5 = triad.df$s5, d1 = triad.df$d1, d2 = triad.df$d2, d3 = triad.df$d3, d4 = triad.df$d4,
+                                 d5 = triad.df$d5, d6 = triad.df$d6, d7 = triad.df$d7, d8 = triad.df$d8)
+  
+  return(motif.data.frame)
+}
+
+# Stability analysis functions from "motifAnalysis.R"
+conversion <- function(tm){
+  for(i in 1:nrow(tm)){
+    for(j in 1:ncol(tm)){
+      if(tm[i,j] == 1 & tm[j,i] == 0){tm[j,i] <- -1}
+    }
+  }
+  return(tm)
+}
+
+ran.unif <- function(motmat){
+  newmat <- apply(motmat, c(1,2), function(x){
+    if(x==1){runif(1, 0, 10)}else if(x==-1){runif(1, -1, 0)} else{0}
+  })
+  diag(newmat) <- runif(nrow(newmat), -1, 0)
+  return(newmat)
+}
+
+maxRE <- function(rmat){
+  lam.max <- max(Re(eigen(rmat)$values))
+  return(lam.max)
+}
+
+eig.analysis <- function(n, matrices){
+  cols <- length(matrices)
+  rows <- n
+  eigenMATRIX <- matrix(0, nrow = rows, ncol = cols)
+  for(i in 1:n){
+    ranmat <- lapply(matrices, ran.unif)
+    
+    eigs <- sapply(ranmat, maxRE)
+    eigenMATRIX[i,] <- eigs
+  }
+  return(eigenMATRIX)
+}
+
+
 # Motif Dictionary
 fournode <- list(
   id14 = matrix(c(2,1,3,1,4,1), ncol = 2, byrow = T),
@@ -216,6 +276,7 @@ for(i in 1:length(fournode)){
 }
 rm(fournode)
 
+
 fivenode <- list()
 system.time(
 for(i in 1:100){
@@ -242,72 +303,10 @@ fournode.gr <- lapply(fournode2, graph.edgelist)
 
 # Create adjacency matrices
 fournode.am <- lapply(fournode.gr, get.adjacency, sparse = F)
-fivenode.am <- lapply(fivenode, get.adjacency, sparse = F)
-
-# motif_counter function from "web_functions.R"
-motif_counter <- function(graph.lists){
-  require(igraph)
-  
-  if(!is.list(graph.lists)){
-    stop("The input should be a list of graph objects")
-  }
-  
-  triad.count <- lapply(graph.lists, triad.census)
-  triad.matrix <- matrix(unlist(triad.count), nrow = length(graph.lists), ncol = 16, byrow = T)
-  colnames(triad.matrix) <- c("empty", "single", "mutual", "s5", "s4", "s1", "d4",
-                              "d3", "s2", "s3","d8", "d2", "d1", "d5", "d7", "d6")
-  
-  triad.df <- as.data.frame(triad.matrix)
-  
-  motif.data.frame <- data.frame(s1 = triad.df$s1, s2 = triad.df$s2, s3 = triad.df$s3, s4 = triad.df$s4, 
-                                 s5 = triad.df$s5, d1 = triad.df$d1, d2 = triad.df$d2, d3 = triad.df$d3, d4 = triad.df$d4,
-                                 d5 = triad.df$d5, d6 = triad.df$d6, d7 = triad.df$d7, d8 = triad.df$d8)
-  
-  return(motif.data.frame)
-}
 
 # count motifs
 mot4 <- motif_counter(fournode.gr)
 rownames(mot4) <- names(fournode2)
-
-mot5 <- motif_counter(fivenode)
-
-
-# Stability analysis functions from "motifAnalysis.R"
-conversion <- function(tm){
-  for(i in 1:nrow(tm)){
-    for(j in 1:ncol(tm)){
-      if(tm[i,j] == 1 & tm[j,i] == 0){tm[j,i] <- -1}
-    }
-  }
-  return(tm)
-}
-
-ran.unif <- function(motmat){
-  newmat <- apply(motmat, c(1,2), function(x){
-    if(x==1){runif(1, 0, 5)}else if(x==-1){runif(1, -1, 0)} else{0}
-  })
-  diag(newmat) <- runif(nrow(newmat), -1, 0)
-  return(newmat)
-}
-
-maxRE <- function(rmat){
-  lam.max <- max(Re(eigen(rmat)$values))
-  return(lam.max)
-}
-
-eig.analysis <- function(n, matrices){
-  cols <- length(matrices)
-  rows <- n
-  eigenMATRIX <- matrix(0, nrow = rows, ncol = cols)
-  for(i in 1:n){
-    ranmat <- lapply(matrices, ran.unif)
-    
-    eigs <- sapply(ranmat, maxRE)
-    eigenMATRIX[i,] <- eigs
-  }
-  return(eigenMATRIX)
-}
 
 
 # run the stability analysis on four node subgraphs
@@ -317,26 +316,45 @@ emat <- eig.analysis(10000, fourN.co)
 )
 #2.33 min
 
+nedges <- sapply(fournode.am, sum)
 qss4 <- apply(emat, 2, function(x){sum(x < 0)/length(x)})
 names(qss4) <- names(fournode.am)
-
-n.edges4 <- sapply(fournode.am, function(x){sum(x)/(4*4)})
-
-sub2 <- cbind(ned = n.edges4, mot4[,1:5], other = rowSums(mot4[,6:13]))
-sub2 <- mot4
-sub2 <- cbind(ned = n.edges4, mot4)
+plot(qss4[order(nedges)])
 
 
-m <- apply(sub2, 2, mean)
-s <- apply(sub2, 2, sd)
+boxplot(qss4~nedges)
 
-z <- apply(sub2, 1, function(x){(x-m)/s})
 
-z.test <-  as.matrix(t(z))
-z.test[is.nan(z.test)] <- 0
 
-cmot4 <- as.matrix(cbind(ed = n.edges4, mot4[,1:5], neg = rowSums(mot4[,6:13])))
-summary(glm(cbind(10000*qss4, 10000-(10000*qss4))~as.matrix(sub2), family = "binomial"))
+fivenode <- list()
+system.time(
+for(i in 1:1000){
+  connect = FALSE
+  while(!connect){
+    e <- sample(4:20, 1, prob = c(rep(.1, 7), rep(.03, 10)))
+    fivenode[[i]] <- erdos.renyi.game(5, p.or.m = e, type = "gnm", directed = T)  
+    
+    comp <- c()
+    for(j in 1:length(fivenode)){
+      if(length(fivenode) == 1){break}
+      if(j > 1){j <- j-1}
+      test <- sum(get.adjacency(fivenode[[i]]) == get.adjacency(fivenode[[j]])) == 25
+      comp <- c(comp, test)
+    }
+    if(sum(comp) >= 1){connect = FALSE}else{connect <- is.connected(fivenode[[i]])}
+  }
+  if(i%%100 == 0) print(i)
+}
+)
+#32 min
+
+# Create adjacency matrices
+fivenode.am <- lapply(fivenode, get.adjacency, sparse = F)
+
+
+# count motifs
+mot5 <- motif_counter(fivenode)
+
 
 # five node stability
 fiveN.co <- lapply(fivenode.am, conversion)
@@ -346,32 +364,22 @@ system.time(
 #9.1 min for 750 matrices
 
 qss5 <- apply(emat5, 2, function(x){sum(x < 0)/length(x)})
+hist(qss5)
+
+apply(mot5[qss5 >= .8,], 2, mean)
+apply(mot5[qss5 < .8 & qss5 >= .3,], 2, mean)
+apply(mot5[qss5 < .3,], 2, mean)
 
 
-n.edges5 <- sapply(fivenode.am, sum)
-
-table(num.edges5)
-
-
-results5 <- data.frame(edges = num.edges5, qss = qss.5)
-
-sub5 <- cbind(mot.5[,1:5], other = rowSums(mot.5[,6:13]))
-
-m5 <- apply(sub5, 2, mean)
-s5 <- apply(sub5, 2, sd)
-
-
-z5 <- (sub5 - m5)/s5
-
-z.test5 <-  as.matrix(z5)
-cmot5 <- as.matrix(cbind(ed = n.edges5, mot5[,1:5], neg = rowSums(mot5[,6:13])))
-summary(glm(cbind(1000*qss5, 1000-(1000*qss5))~cmot5-1, family = "binomial"))
-
+apply(mot4[qss4 >= .8,], 2, mean)
+apply(mot4[qss4 < .8 & qss4 >= .3,], 2, mean)
+apply(mot4[qss4 < .3,], 2, mean)
 
 # larger webs
 
 tens <- list()
-for(i in 1:100){
+
+for(i in 1:1000){
   connect = FALSE
   while(!connect){
     con <- rbeta(1, 1, 3)
@@ -386,7 +394,8 @@ for(i in 1:100){
     }
     if(sum(comp) >= 1){connect = FALSE}else{connect <- is.connected(tens[[i]])}
   }
-  print(i)
+  #print(i)
+  if(i%%100 == 0) print(i)
 }
 
 
@@ -401,14 +410,280 @@ system.time(
 # 4.47 min for 200 matrices
 
 qss10 <- apply(eig10, 2, function(x){sum(x < 0)/length(x)})
-qss10
+hist(qss10)
 
 mot10 <- motif_counter(tens)
 
-z10 <- (mot10 - colMeans(mot10))/apply(mot10, 2, sd)
+apply(mot10[qss10 >= .8,], 2, mean)
+apply(mot10[qss10 < .8 & qss10 >= .3,], 2, mean)
+apply(mot10[qss10 < .3,], 2, mean)
 
-#cmot10 <- as.matrix(cbind(mot10[,1:5], neg = rowSums(mot10[,6:13])))
-cmot10 <- as.matrix(cbind(ed = ned, mot10[,1:5], neg = rowSums(mot10[,6:13])))
-cz10 <-  as.matrix(cbind(ed = ned, z10[,1:5], neg = rowSums(z10[,6:13])))
 
-summary(glm(cbind(1000*qss10, 1000-(1000*qss10))~cmot10, family = "binomial"))
+
+
+qs <- c(qss4, qss5, qss10)
+rs <- c(r, r5, r10)
+
+plot(qs~rs)
+fits <- glm(cbind(1000*qs, 1000-(1000*qs))~rs, family = "binomial")
+points(sort(fits$fitted.values, decreasing = F)~sort(rs, decreasing = F), col = "blue", typ = "o")
+
+
+
+niche.model<-function(S,C){
+  require(igraph)
+  connected = FALSE
+  while(!connected){  
+    new.mat<-matrix(0,nrow=S,ncol=S)
+    ci<-vector()
+    niche<-runif(S,0,1)
+    r<-rbeta(S,1,((1/(2*C))-1))*niche
+    
+    for(i in 1:S){
+      ci[i]<-runif(1,r[i]/2,niche[i])
+    }
+    
+    r[which(niche==min(niche))]<-.00000001
+    
+    for(i in 1:S){
+      
+      for(j in 1:S){
+        if(niche[j]>(ci[i]-(.5*r[i])) && niche[j]<(ci[i]+.5*r[i])){
+          new.mat[j,i]<-1
+        }
+      }
+    }
+    
+    new.mat<-new.mat[,order(apply(new.mat,2,sum))]
+    
+    connected <- is.connected(graph.adjacency(new.mat))
+  }
+  return(new.mat)
+}
+
+niche_maker <- function(n, S, C){
+  niche.list <- list()
+  for (i in 1:n){
+    niche.list[[i]]<- niche.model(S, C)
+  }
+  return(niche.list)
+}
+
+
+n1 <- niche_maker(5000, 15, .1)
+N.co <- lapply(n1, conversion)
+system.time(
+  ematN <- eig.analysis(10000, N.co)
+)
+
+
+qssN <- apply(ematN, 2, function(x){sum(x < 0)/length(x)})
+motN <- motif_counter(lapply(n1, graph.adjacency))
+
+stN <- rowSums(motN[,c(1,4,5)])
+nstN <- rowSums(motN[,-c(1,4,5)])
+
+rN <- (stN+1)/(nstN+1)
+plot(qssN~rN)
+fitN <- glm(cbind(10000*qssN, 10000-(10000*qssN))~rN, family = "binomial")
+points(sort(fitN$fitted.values, decreasing = F)~sort(rN, decreasing = F), col = "blue", typ = "o")
+
+df <- cbind(qssN, rN)
+coef.b <- matrix(nrow = 10000, ncol = 2)
+for(i in 1:10000){
+  rows <- sample(1:nrow(df), nrow(df), replace = T)
+  bootdf <- df[rows,]
+  fit.boot <- glm(cbind(10000*bootdf[,1], 10000-(10000*bootdf[,1]))~bootdf[,2], family = "binomial")
+  coef.b[i,] <- fit.boot$coefficients
+}
+
+ci.coef <- apply(coef.b, 2, function(x){quantile(x, c(.025, .975))})
+ci.coef99 <- apply(coef.b, 2, function(x){quantile(x, c(.005, .995))})
+#abline(a = inv.logit(ci.coef[1,1]), inv.logit(ci.coef[1,2]))
+#abline(a = inv.logit(ci.coef[2,1]), inv.logit(ci.coef[2,2]))
+y.low <- c()
+y.hi <- c()
+for(i in 1:100){
+  y.low[i] <- inv.logit(ci.coef[1,1] + ci.coef[1,2]*i) 
+  y.hi[i] <- inv.logit(ci.coef[2,1] + ci.coef[2,2]*i)
+}
+points(y.low, col = "blue", typ = "o", pch = 18)
+points(y.hi, col = "blue", typ = "o", pch = 18)
+
+y.low99 <- c()
+y.hi99 <- c()
+for(i in 1:100){
+  y.low99[i] <- inv.logit(ci.coef99[1,1] + ci.coef99[1,2]*i) 
+  y.hi99[i] <- inv.logit(ci.coef99[2,1] + ci.coef99[2,2]*i)
+}
+points(y.low99, col = "purple", typ = "o", pch = 18)
+points(y.hi99, col = "purple", typ = "o", pch = 18)
+
+#############################################
+aic.rand1 <- c()
+fitval <- matrix(nrow = ncol(rand), ncol = 5000)
+rN.r <- matrix(nrow = ncol(rand), ncol = length(rN))
+rand <- combn(1:13, 3)
+
+for(i in 1:ncol(rand)){
+  randi <- rand[,i]
+  stN.r <- rowSums(motN[,randi])
+  nstN.r <- rowSums(motN[,-randi])
+  
+  rN.r[i,] <- (stN.r+1)/(nstN.r+1)
+  fitrand <- glm(cbind(10000*qssN, 10000-(10000*qssN))~rN.r[i,], family = "binomial")
+  aic.rand1[i] <- fitrand$aic
+  
+  fitval[i,] <- fitrand$fitted.values
+}
+
+plot(fitval[i,]~rN.r[i,], ylim = c(0,1), xlim = c(0, 100))
+for(i in 2:ncol(rand)){
+  points(fitval[i,]~rN.r[i,])
+}
+
+hist(aic.rand1)
+abline(v = fitN$aic)
+
+sum(aic.rand1 <= fitN$aic)/length(aic.rand1)
+
+
+
+#############################################
+fw.mot <- read.csv("https://raw.githubusercontent.com/jjborrelli/Ecological-Networks/master/FoodWebs/Tables/motifCOUNTS.csv", row.names = 2)[,-1]
+
+fw.r <- rowSums(fw.mot[,c(1,4,5)]+1)/rowSums(fw.mot[,-c(1,4,5)]+1)
+
+fw.pred <- inv.logit(fitN$coefficients[1] + fitN$coefficients[2]*fw.r )
+points(fw.pred~fw.r, col = "green", pch = 17)
+
+load("C:/Users/jjborrelli/Desktop/GitHub/Subgraph-Stability/webGRAPHS.Rdata")
+web.adj <- lapply(web.graphs, get.adjacency, sparse = F)
+fw.eig <- eig.analysis(10000, web.adj)
+fw.qss <- apply(fw.eig, 2, function(x){sum(x < 0)})
+points(fw.qss~fw.r, col = "darkgreen", pch = 17)
+
+cor.test(qssN, rN)
+nc <- c()
+for(i in 1:1000){
+  nqss <- sample(qssN)
+  nc[i] <- cor.test(nqss, rN)$estimate
+}
+hist(nc)
+
+Ndf <- data.frame(s = 10000*qssN, f = 10000-(10000*qssN), rat = rN)
+
+each.rN<- rep(rN, each = 10000)
+bin = c()
+for(i in 1:nrow(Ndf)){
+  bin <- c(bin, rep(1, Ndf[i,1]), rep(0, Ndf[i,2]))
+}
+
+ndf <- data.frame(bin, each.rN)
+ggplot(ndf, aes(x = each.rN, y = bin)) + geom_point(data = Ndf, aes(x = rN, y = s/10000), alpha = .5) + stat_smooth(method = "glm", family = "binomial", size = 1.5) + theme_bw() + xlab("ratio") + ylab("Quasi sign-stability")
+
+#qssN[which(qssN == 0)] <- qssN[which(qssN == 0)] + 10^-7
+#qssN[which(qssN == 1)] <- qssN[which(qssN == 1)] - 10^-7
+
+breg <- betareg(qssN~rN)
+summary(breg)
+summary(fitN)
+
+pcM <- princomp(motN)
+pcM$loadings
+biplot(pcM)
+
+fitN <- glm(cbind(10000*qssN, 10000-(10000*qssN))~con+as.matrix(motN), family = "binomial")
+summary(fitN)
+
+m2 <- matrix(nrow = nrow(motN), ncol = 13)
+for(i in 1:nrow(motN)){
+  m2[i,] <- unlist((motN[i,] - mean(unlist(motN[i,])))/sd(motN[i,]))
+  #m2[i,] <- unlist(motN[i,]/nume[i])
+  #m2[i,] <- unlist(motN[i,]/sum(sqrt(motN[i,])))
+}
+colnames(m2) <- colnames(motN)
+fitN <- glm(cbind(10000*qssN, 10000-(10000*qssN))~m2, family = "binomial")
+summary(fitN)
+
+par(mfrow = c(3,5))
+for(i in 1:13){
+  plot(qssN~m2[,i], xlab = colnames(motN)[i])
+}
+
+fitN <- glm(cbind(10000*qssN, 10000-(10000*qssN))~motN$s1+motN$s2+motN$s3+motN$s4+motN$s5+motN$d1+motN$d2+motN$d3+motN$d4+motN$d5+motN$d6+motN$d7+motN$d8, family = "binomial")
+m2 <- as.data.frame(m2)
+fitN <- glm(cbind(10000*qssN, 10000-(10000*qssN))~m2$s1+m2$s2+m2$s3+m2$s4+m2$s5+m2$d1+m2$d2+m2$d3+m2$d4+m2$d5+m2$d6+m2$d7+m2$d8, family = "binomial")
+summary(fitN)
+hist(m2$d8)
+
+
+testN <- t(apply(as.matrix(motN), 1, function(x){x/sum(x)})) 
+fit.test <- glm(cbind(10000*qssN, 10000-(10000*qssN))~testN, family = "binomial")
+
+
+
+##############################################################################
+curve_ball<-function(m){
+  RC=dim(m)
+  R=RC[1]
+  C=RC[2]
+  hp=list()
+  for (row in 1:dim(m)[1]) {hp[[row]]=(which(m[row,]==1))}
+  l_hp=length(hp)
+  for (rep in 1:5*l_hp){
+    AB=sample(1:l_hp,2)
+    a=hp[[AB[1]]]
+    b=hp[[AB[2]]]
+    ab=intersect(a,b)
+    l_ab=length(ab)
+    l_a=length(a)
+    l_b=length(b)
+    if ((l_ab %in% c(l_a,l_b))==F){
+      tot=setdiff(c(a,b),ab)
+      l_tot=length(tot)
+      tot=sample(tot, l_tot, replace = FALSE, prob = NULL)
+      L=l_a-l_ab
+      hp[[AB[1]]] = c(ab,tot[1:L])
+      hp[[AB[2]]] = c(ab,tot[(L+1):l_tot])}
+    
+  }
+  rm=matrix(0,R,C)
+  for (row in 1:R){rm[row,hp[[row]]]=1}
+  rm
+}
+
+
+the.nm <- niche.model(10, .2)
+mynm <- the.nm
+mymc <- motif_counter(graph.lists = list(graph.adjacency(mynm)))
+myqss <- sum(eig.analysis(1000, list(conversion(mynm))) < 0)/1000
+
+iter = 1000
+for(j in 1:iter){
+  mynm <- curve_ball(mynm)
+  new1 <- conversion(mynm)
+  mymc <- rbind(mymc, motif_counter(list(graph.adjacency(mynm))))
+  meig <- c()
+  rho <- c()
+  for(i in 1:1000){
+    ru <- ran.unif(new1)
+    meig[i] <- maxRE(ru)
+    rho[i] <-cor.test() 
+  }
+  myqss <- c(myqss, sum(meig < 0)/1000)
+  print(j)
+}
+
+fit1 <- glm(cbind(1000*myqss, 1000-(1000*myqss))~as.matrix(mymc), family = "binomial")
+summary(fit1)
+
+fit2 <- glm(cbind(1000*myqss, 1000-(1000*myqss))~mymc$s4+mymc$d4+mymc$s1+mymc$s5, family = "binomial")
+summary(fit2)
+
+fit.all <- glm(cbind(1000*myqss, 1000-(1000*myqss))~mymc$s1+mymc$s2+mymc$s3+mymc$s4+mymc$s5+mymc$d1+mymc$d2+mymc$d3+mymc$d4+mymc$d5+mymc$d6+mymc$d7+mymc$d8, family = "binomial")
+summary(fit.all)
+stepAIC(fit.all, direction = "both")
+
+
+
