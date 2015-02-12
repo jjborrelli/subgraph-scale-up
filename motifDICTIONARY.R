@@ -1,3 +1,7 @@
+library(igraph)
+library(ggplot2)
+library(reshape2)
+
 # Motif Dictionary
 fournode <- list(
   id14 = matrix(c(2,1,3,1,4,1), ncol = 2, byrow = T),
@@ -214,7 +218,7 @@ rm(fournode)
 
 fivenode <- list()
 system.time(
-for(i in 1:750){
+for(i in 1:100){
   connect = FALSE
   while(!connect){
     e <- sample(4:20, 1, prob = c(rep(.1, 7), rep(.03, 10)))
@@ -234,7 +238,6 @@ for(i in 1:750){
 )
 
 # Convert adjacency lists into graph objects
-library(igraph)
 fournode.gr <- lapply(fournode2, graph.edgelist)
 
 # Create adjacency matrices
@@ -310,29 +313,30 @@ eig.analysis <- function(n, matrices){
 # run the stability analysis on four node subgraphs
 fourN.co <- lapply(fournode.am, conversion)
 system.time(
-emat <- eig.analysis(1000, fourN.co)
+emat <- eig.analysis(10000, fourN.co)
 )
 #2.33 min
 
 qss4 <- apply(emat, 2, function(x){sum(x < 0)/length(x)})
 names(qss4) <- names(fournode.am)
 
-n.edges4 <- sapply(fournode.am, sum)
+n.edges4 <- sapply(fournode.am, function(x){sum(x)/(4*4)})
 
 sub2 <- cbind(ned = n.edges4, mot4[,1:5], other = rowSums(mot4[,6:13]))
-sub2 <- mot.4
+sub2 <- mot4
+sub2 <- cbind(ned = n.edges4, mot4)
 
 
 m <- apply(sub2, 2, mean)
 s <- apply(sub2, 2, sd)
 
+z <- apply(sub2, 1, function(x){(x-m)/s})
 
-z <- (sub2 - m)/s
-
-z.test <-  as.matrix(z)
+z.test <-  as.matrix(t(z))
+z.test[is.nan(z.test)] <- 0
 
 cmot4 <- as.matrix(cbind(ed = n.edges4, mot4[,1:5], neg = rowSums(mot4[,6:13])))
-summary(glm(cbind(1000*qss4, 1000-(1000*qss4))~cmot4-1, family = "binomial"))
+summary(glm(cbind(10000*qss4, 10000-(10000*qss4))~as.matrix(sub2), family = "binomial"))
 
 # five node stability
 fiveN.co <- lapply(fivenode.am, conversion)
@@ -367,7 +371,7 @@ summary(glm(cbind(1000*qss5, 1000-(1000*qss5))~cmot5-1, family = "binomial"))
 # larger webs
 
 tens <- list()
-for(i in 1:200){
+for(i in 1:100){
   connect = FALSE
   while(!connect){
     con <- rbeta(1, 1, 3)
@@ -407,4 +411,4 @@ z10 <- (mot10 - colMeans(mot10))/apply(mot10, 2, sd)
 cmot10 <- as.matrix(cbind(ed = ned, mot10[,1:5], neg = rowSums(mot10[,6:13])))
 cz10 <-  as.matrix(cbind(ed = ned, z10[,1:5], neg = rowSums(z10[,6:13])))
 
-summary(glm(cbind(1000*qss10, 1000-(1000*qss10))~cmot10-1, family = "binomial"))
+summary(glm(cbind(1000*qss10, 1000-(1000*qss10))~cmot10, family = "binomial"))
