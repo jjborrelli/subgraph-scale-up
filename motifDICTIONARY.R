@@ -467,82 +467,20 @@ niche_maker <- function(n, S, C){
 }
 
 
-n1 <- niche_maker(5000, 15, .1)
+n1 <- niche_maker(1000, 15, .1)
 N.co <- lapply(n1, conversion)
 system.time(
-  ematN <- eig.analysis(10000, N.co)
+  ematN <- eig.analysis(1000, N.co)
 )
 
 
 qssN <- apply(ematN, 2, function(x){sum(x < 0)/length(x)})
 motN <- motif_counter(lapply(n1, graph.adjacency))
 
-stN <- rowSums(motN[,c(1,4,5)])
-nstN <- rowSums(motN[,-c(1,4,5)])
 
-rN <- (stN+1)/(nstN+1)
-plot(qssN~rN)
-fitN <- glm(cbind(10000*qssN, 10000-(10000*qssN))~rN, family = "binomial")
-points(sort(fitN$fitted.values, decreasing = F)~sort(rN, decreasing = F), col = "blue", typ = "o")
-
-df <- cbind(qssN, rN)
-coef.b <- matrix(nrow = 10000, ncol = 2)
-for(i in 1:10000){
-  rows <- sample(1:nrow(df), nrow(df), replace = T)
-  bootdf <- df[rows,]
-  fit.boot <- glm(cbind(10000*bootdf[,1], 10000-(10000*bootdf[,1]))~bootdf[,2], family = "binomial")
-  coef.b[i,] <- fit.boot$coefficients
-}
-
-ci.coef <- apply(coef.b, 2, function(x){quantile(x, c(.025, .975))})
-ci.coef99 <- apply(coef.b, 2, function(x){quantile(x, c(.005, .995))})
-#abline(a = inv.logit(ci.coef[1,1]), inv.logit(ci.coef[1,2]))
-#abline(a = inv.logit(ci.coef[2,1]), inv.logit(ci.coef[2,2]))
-y.low <- c()
-y.hi <- c()
-for(i in 1:100){
-  y.low[i] <- inv.logit(ci.coef[1,1] + ci.coef[1,2]*i) 
-  y.hi[i] <- inv.logit(ci.coef[2,1] + ci.coef[2,2]*i)
-}
-points(y.low, col = "blue", typ = "o", pch = 18)
-points(y.hi, col = "blue", typ = "o", pch = 18)
-
-y.low99 <- c()
-y.hi99 <- c()
-for(i in 1:100){
-  y.low99[i] <- inv.logit(ci.coef99[1,1] + ci.coef99[1,2]*i) 
-  y.hi99[i] <- inv.logit(ci.coef99[2,1] + ci.coef99[2,2]*i)
-}
-points(y.low99, col = "purple", typ = "o", pch = 18)
-points(y.hi99, col = "purple", typ = "o", pch = 18)
-
-#############################################
-aic.rand1 <- c()
-fitval <- matrix(nrow = ncol(rand), ncol = 5000)
-rN.r <- matrix(nrow = ncol(rand), ncol = length(rN))
-rand <- combn(1:13, 3)
-
-for(i in 1:ncol(rand)){
-  randi <- rand[,i]
-  stN.r <- rowSums(motN[,randi])
-  nstN.r <- rowSums(motN[,-randi])
-  
-  rN.r[i,] <- (stN.r+1)/(nstN.r+1)
-  fitrand <- glm(cbind(10000*qssN, 10000-(10000*qssN))~rN.r[i,], family = "binomial")
-  aic.rand1[i] <- fitrand$aic
-  
-  fitval[i,] <- fitrand$fitted.values
-}
-
-plot(fitval[i,]~rN.r[i,], ylim = c(0,1), xlim = c(0, 100))
-for(i in 2:ncol(rand)){
-  points(fitval[i,]~rN.r[i,])
-}
-
-hist(aic.rand1)
-abline(v = fitN$aic)
-
-sum(aic.rand1 <= fitN$aic)/length(aic.rand1)
+apply(motN[qssN >= .8,], 2, mean)
+apply(motN[qssN < .8 & qss10 >= .3,], 2, mean)
+apply(motN[qssN < .3,], 2, mean)
 
 
 
