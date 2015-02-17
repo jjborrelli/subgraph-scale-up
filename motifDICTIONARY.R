@@ -1,4 +1,7 @@
 library(igraph)
+library(ggplot2)
+library(reshape2)
+
 
 # motif_counter function from "web_functions.R"
 motif_counter <- function(graph.lists){
@@ -57,7 +60,6 @@ eig.analysis <- function(n, matrices){
   }
   return(eigenMATRIX)
 }
-
 
 
 # Motif Dictionary
@@ -274,8 +276,29 @@ for(i in 1:length(fournode)){
 }
 rm(fournode)
 
-# Convert adjacency lists into graph objects
 
+fivenode <- list()
+system.time(
+for(i in 1:100){
+  connect = FALSE
+  while(!connect){
+    e <- sample(4:20, 1, prob = c(rep(.1, 7), rep(.03, 10)))
+    fivenode[[i]] <- erdos.renyi.game(5, p.or.m = e, type = "gnm", directed = T)  
+    
+    comp <- c()
+    for(j in 1:length(fivenode)){
+      if(length(fivenode) == 1){break}
+      if(j > 1){j <- j-1}
+      test <- sum(get.adjacency(fivenode[[i]]) == get.adjacency(fivenode[[j]])) == 25
+      comp <- c(comp, test)
+    }
+    if(sum(comp) >= 1){connect = FALSE}else{connect <- is.connected(fivenode[[i]])}
+  }
+  print(i)
+}
+)
+
+# Convert adjacency lists into graph objects
 fournode.gr <- lapply(fournode2, graph.edgelist)
 
 # Create adjacency matrices
@@ -289,7 +312,7 @@ rownames(mot4) <- names(fournode2)
 # run the stability analysis on four node subgraphs
 fourN.co <- lapply(fournode.am, conversion)
 system.time(
-  emat <- eig.analysis(1000, fourN.co)
+emat <- eig.analysis(10000, fourN.co)
 )
 #2.33 min
 
@@ -299,30 +322,9 @@ names(qss4) <- names(fournode.am)
 plot(qss4[order(nedges)])
 
 
-m4 <- matrix(nrow = nrow(mot4), ncol = 13)
-for(i in 1:nrow(mot4)){
-  m4[i,] <- unlist((mot4[i,]-mean(unlist(mot4[i,])))/sd(mot4[i,])) 
-}
-colnames(m4) <- colnames(mot4)
-m4 <- as.data.frame(m4)
-fit4.full <- glm(cbind(1000*qss4[nedges == 7], 1000-(1000*qss4[nedges == 7]))~m4[nedges == 7,], family = "binomial")
-summary(fit4.full)
-fitr <- glm(cbind(1000*qss4, 1000-(1000*qss4))~as.matrix(mot4), family = "binomial")
-summary(fitr)
-
-
 boxplot(qss4~nedges)
 
-spmot4 <- split(mot4, nedges)
-spqss4 <- split(qss4, nedges)
 
-sapply(spmot4, colSums)
-
-summary(lm(spqss4[["7"]]~as.matrix(spmot4[["7"]])[,1:5]))
-# those with decent sample size
-sub <- which(nedges >=4 & nedges <=9)
-
-## Five Nodes
 
 fivenode <- list()
 system.time(
@@ -376,6 +378,7 @@ apply(mot4[qss4 < .3,], 2, mean)
 # larger webs
 
 tens <- list()
+
 for(i in 1:1000){
   connect = FALSE
   while(!connect){
@@ -621,5 +624,4 @@ summary(fit.all)
 stepAIC(fit.all, direction = "both")
 
 
-testN <- apply(motN, c(1,2), function(x){if(!x == 0){log(x)}else{0}}) 
-fit.test <- glm(cbind(1000*qssN, 1000-(1000*qssN))~as.matrix(testN), family = "binomial")
+
