@@ -1,4 +1,5 @@
 base
 ggplot2
 igraph
+knitr
 reshape2
