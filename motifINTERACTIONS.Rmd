@@ -400,6 +400,10 @@ ran.unif <- function(motmat){
   diag(newmat) <- runif(nrow(newmat), -1, 0)
   return(newmat)
 }
+
+
+library(compiler)
+ran.unif.cmp <- cmpfun(ran.unif)
 ```
 
 Once the matrix was filled with random values the eigenvalue with the largest real part was calculated (as max(Re($\lambda$)); `max(Re(eigen(matrix)$values))`). If this eigenvalue is negative, then the matrix is considered stable at equilibrium, while if it is positive the matrix is unstable. 
@@ -419,7 +423,7 @@ eig.analysis <- function(n, matrices){
   rows <- n
   eigenMATRIX <- matrix(0, nrow = rows, ncol = cols)
   for(i in 1:n){
-    ranmat <- lapply(matrices, ran.unif)
+    ranmat <- lapply(matrices, ran.unif.cmp)
     
     eigs <- sapply(ranmat, maxRE)
     eigenMATRIX[i,] <- eigs
@@ -428,21 +432,15 @@ eig.analysis <- function(n, matrices){
 }
 ```
 
-```{r compile, echo = FALSE}
-library(compiler)
-eig.analysis.cmp <- cmpfun(eig.analysis)
-```
-
-
 ```{r cache = TRUE}
 fourN.co <- lapply(fournode.am, conversion)
-emat <- eig.analysis.cmp(1000, fourN.co)
+emat <- eig.analysis(1000, fourN.co)
 
 fiveN.co <- lapply(fivenode.am, conversion)
-emat5 <- eig.analysis.cmp(1000, fiveN.co)
+emat5 <- eig.analysis(1000, fiveN.co)
 
 cmat10 <- lapply(mat10, conversion)
-eig10 <- eig.analysis.cmp(1000, cmat10)
+eig10 <- eig.analysis(1000, cmat10)
 ```
 
 Quasi sign-stability of each matrix was then computed as the proportion of randomizations that were stable (negative eigenvalue). 
@@ -519,65 +517,109 @@ One-thousand iterations of the random draw process were used to generate 1000 ei
 
 ```{r}
 qssSCALED <- function(motMATS){
+  # mots is how many networks there are
   mots <- length(motMATS)
   
+  # get the motif structure of each network, as df
   motifS <- motif_counter(lapply(motMATS, graph.adjacency))
   
   rem.l <- list()
   mchange <- list()
   for(i in 1:mots){
+    # get ith adjacency matrix
     mat <- motMATS[[i]]
+    
+    # get all combinations of row/column
     pairs1 <- unlist(apply(combn(1:nrow(mat), 2), 2, list), recursive = F)
     
+    # delete each link one at a time
     lmat <- lapply(pairs1,function(x){
       mat2 <- mat
       if(mat2[x[1],x[2]] == 1){mat2[x[1],x[2]] <- 0}
       if(mat2[x[2],x[1]] == 1){mat2[x[2],x[1]] <- 0};return(mat2)})
     
+    # which of the lmat are not the same as the original
     removed <- sapply(lmat,sum) != sum(mat)
+    # retain only the new matrices with a deleted link
     lmat <- lmat[removed]
     
+    # remember which of the "pairs1" had a link for the ith matrix of motMATS
     rem.l[[i]] <- which(removed)
+    # get the motif structure of the network with the deleted link
     mchange[[i]] <- abs(apply(do.call(rbind, apply(motif_counter(lapply(lmat, graph.adjacency)), 1, function(x){x - motifS[i,]})), c(1,2), 
                               function(x){if(x > 0){x <- 0}else{x}}))
+    # end looping through motMATS to get altered motif structures
+    # returns
+      # rem.l = list of which elements of the matrices had links
+      # mchange = list of dataframes of motif structure, 
+      #           where each df in list has structure of the matrix minus one link
   }
   
-  
+  # Figure out to what class do these links belong? 
+  # class1 there are only changes in tritrophic chain, apparent and direct comp
   class1 <- lapply(mchange, function(x){rowSums(x[,c(1,4,5)]) > 0 & rowSums(x[,-c(1,4,5)]) == 0})
+  # class2 there are only changes in intraguild predation
   class2 <- lapply(mchange, function(x){x[,2] > 0 & rowSums(x[,-c(1,2,3,5)]) == 0})
+  # class3 there are changes in anything other than the above
   class3 <- lapply(mchange, function(x){rowSums(x[,-c(1,2,4,5)]) > 0})
   
+  # initiate null matrix list
   matCon.N <- list()
+  # initiate data matrix for eigenvalue
   lam.max <- matrix(0, nrow = 10000, ncol = mots)
+  # initiate data matrix for eigenvalue of null model
   lam.max.N <- matrix(0, nrow = 10000, ncol = mots)
-  for(n in 1:10000){
+  for(n in 1:100){
+    # Start loop to generate 10000 eigenvalues for each of the matrices in motMATS
+    # apply conversion function to get sign matrices for all motMATS
     matCon <- lapply(motMATS[1:mots], conversion)
     
     for(i in 1:mots){
+      # Start looping through each signed motMATS
       for(j in 1:length(rem.l[[i]])){
+        # For each sign matrix in motMATS there are rem.l[[i]] links we are interested in
+        # Loops through each link in the matrix
+        
+        # Pull out the row and column of the link of interest
         row1 <- pairs1[[rem.l[[i]][j]]][1]
         col1 <- pairs1[[rem.l[[i]][j]]][2]
         
+        # Perform class check on the jth link of the ith motMATS
+        
+        # class1 gets runif 0:10, -1:0
         if(class1[[i]][j]){if(matCon[[i]][row1, col1]==1){matCon[[i]][row1, col1] <- runif(1, 0, 10)}
                            if(matCon[[i]][col1, row1]==-1){matCon[[i]][col1, row1] <- runif(1, -1, 0)}}
-        
+        # class2 gets runif 0:1 -.1:0
         if(class2[[i]][j]){if(matCon[[i]][row1, col1]==1){matCon[[i]][row1, col1] <- runif(1, 0, 1)}
                            if(matCon[[i]][col1, row1]==-1){matCon[[i]][col1, row1] <- runif(1, -.1, 0)}}
-        
+        # class3 gets runif 0:.1 -.01:0
         if(class3[[i]][j]){if(matCon[[i]][row1, col1]==1){matCon[[i]][row1, col1] <- runif(1, 0, .1)}
                            if(matCon[[i]][col1, row1]==-1){matCon[[i]][col1, row1] <- runif(1, -.01, 0)}else if(matCon[[i]][col1, row1]==1){
                              matCon[[i]][col1, row1] <- runif(1, 0, .1)}}
+        
+        # end looping through each link
       }
+      # what links did I just loop over? 
       links <- do.call(rbind, pairs1[rem.l[[i]]])
+      
+      # set initial while loop condition to true to initiate while loop
       same = TRUE
       while(same){
+        # while loop shuffles the link pairs with s
         s <- sample(1:nrow(links))
+        # check if most links are actually shuffled
         same <- sum(s == 1:nrow(links)) > (nrow(links)/2)
       }
-        
+      
+      # add filled and signed matrix to null list
       matCon.N[[i]] <- matCon[[i]]
+      # shuffle aij values (note does not preserve sign!!!!!!!!!)
       matCon.N[[i]][links] <- matCon[[i]][links[s,]]
+      # shuffle aji
       matCon.N[[i]][links[,c(2,1)]] <- matCon[[i]][links[s,c(2,1)]]
+      # retain sign structure
+      matCon.N[[i]] <- apply(matCon.N[[i]], c(1,2), abs) * conversion(motMATS[[i]]) 
+      
     }
     
     matCon <- lapply(matCon, function(x){diag(x) <- runif(nrow(x), -1, 0); return(x)})
@@ -587,8 +629,8 @@ qssSCALED <- function(motMATS){
     lam.max.N[n,] <- sapply(matCon.N, function(x){max(Re(eigen(x)$values))})
   }
   
-  qss.2 <- apply(lam.max, 2, function(x){sum(x < 0)/length(x)})
-  qss.2.N <- apply(lam.max.N, 2, function(x){sum(x < 0)/length(x)})
+  qss.2 <- apply(lam.max, 2, function(x){sum(x[1:100] < 0)/length(x[1:100])})
+  qss.2.N <- apply(lam.max.N, 2, function(x){sum(x[1:100] < 0)/length(x[1:100])})
   
   return(list(qss.2, qss.2.N))
 }
