@@ -569,7 +569,7 @@ qssSCALED <- function(motMATS){
   lam.max <- matrix(0, nrow = 10000, ncol = mots)
   # initiate data matrix for eigenvalue of null model
   lam.max.N <- matrix(0, nrow = 10000, ncol = mots)
-  for(n in 1:100){
+  for(n in 1:10000){
     # Start loop to generate 10000 eigenvalues for each of the matrices in motMATS
     # apply conversion function to get sign matrices for all motMATS
     matCon <- lapply(motMATS[1:mots], conversion)
@@ -629,8 +629,8 @@ qssSCALED <- function(motMATS){
     lam.max.N[n,] <- sapply(matCon.N, function(x){max(Re(eigen(x)$values))})
   }
   
-  qss.2 <- apply(lam.max, 2, function(x){sum(x[1:100] < 0)/length(x[1:100])})
-  qss.2.N <- apply(lam.max.N, 2, function(x){sum(x[1:100] < 0)/length(x[1:100])})
+  qss.2 <- apply(lam.max, 2, function(x){sum(x < 0)/length(x)})
+  qss.2.N <- apply(lam.max.N, 2, function(x){sum(x < 0)/length(x)})
   
   return(list(qss.2, qss.2.N))
 }
