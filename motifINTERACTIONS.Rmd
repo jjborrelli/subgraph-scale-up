@@ -563,12 +563,16 @@ qssSCALED <- function(motMATS){
   # class3 there are changes in anything other than the above
   class3 <- lapply(mchange, function(x){rowSums(x[,-c(1,2,4,5)]) > 0})
   
-  # initiate null matrix list
+  # initiate null matrix list for null model 1
   matCon.N <- list()
+  # initiate null matrix list for null model 2
+  matCon.N2 <- list()
   # initiate data matrix for eigenvalue
   lam.max <- matrix(0, nrow = 10000, ncol = mots)
-  # initiate data matrix for eigenvalue of null model
+  # initiate data matrix for eigenvalue of null model 1
   lam.max.N <- matrix(0, nrow = 10000, ncol = mots)
+  # initiate data matrix for eigenvalue of null model 2
+  lam.max.N2 <- matrix(0, nrow = 10000, ncol = mots)
   for(n in 1:10000){
     # Start loop to generate 10000 eigenvalues for each of the matrices in motMATS
     # apply conversion function to get sign matrices for all motMATS
@@ -599,9 +603,12 @@ qssSCALED <- function(motMATS){
         
         # end looping through each link
       }
+      
+      ## Null 1: shuffle pairs
+      
       # what links did I just loop over? 
       links <- do.call(rbind, pairs1[rem.l[[i]]])
-      
+
       # set initial while loop condition to true to initiate while loop
       same = TRUE
       while(same){
@@ -610,7 +617,7 @@ qssSCALED <- function(motMATS){
         # check if most links are actually shuffled
         same <- sum(s == 1:nrow(links)) > (nrow(links)/2)
       }
-      
+
       # add filled and signed matrix to null list
       matCon.N[[i]] <- matCon[[i]]
       # shuffle aij values (note does not preserve sign!!!!!!!!!)
@@ -618,27 +625,43 @@ qssSCALED <- function(motMATS){
       # shuffle aji
       matCon.N[[i]][links[,c(2,1)]] <- matCon[[i]][links[s,c(2,1)]]
       # retain sign structure
-      matCon.N[[i]] <- apply(matCon.N[[i]], c(1,2), abs) * conversion(motMATS[[i]]) 
+      matCon.N[[i]] <- apply(matCon.N[[i]], c(1,2), abs) * conversion(motMATS[[i]])
+      
+      
+      # Null 2: Shuffle negatives with negatives and positives with positives
+      neg <- which(matCon[[i]] < 0)
+      pos <- which(matCon[[i]] > 0)
+      
+      # add filled and signed matrix to null list
+      matCon.N2[[i]] <- matCon[[i]]
+      # shuffle positive values 
+      matCon.N2[[i]][neg] <- matCon[[i]][sample(neg)]
+      # shuffle negative values
+      matCon.N2[[i]][pos] <- matCon[[i]][sample(pos)]
+      
       
     }
     
     matCon <- lapply(matCon, function(x){diag(x) <- runif(nrow(x), -1, 0); return(x)})
     matCon.N <- lapply(matCon.N, function(x){diag(x) <- runif(nrow(x), -1, 0); return(x)})
+    matCon.N2 <- lapply(matCon.N, function(x){diag(x) <- runif(nrow(x), -1, 0); return(x)})
     
     lam.max[n,] <- sapply(matCon, function(x){max(Re(eigen(x)$values))})
     lam.max.N[n,] <- sapply(matCon.N, function(x){max(Re(eigen(x)$values))})
+    lam.max.N2[n,] <- sapply(matCon.N2, function(x){max(Re(eigen(x)$values))})
   }
   
   qss.2 <- apply(lam.max, 2, function(x){sum(x < 0)/length(x)})
   qss.2.N <- apply(lam.max.N, 2, function(x){sum(x < 0)/length(x)})
+  qss.2.N2 <- apply(lam.max.N2, 2, function(x){sum(x < 0)/length(x)})
   
-  return(list(qss.2, qss.2.N))
+  return(list(orig = qss.2, null1 = qss.2.N, null2 = qss.2.N2))
 }
 ```
 
 I used this function on the networks that I generated above (4 nodes, 5 nodes, and 10 nodes) to determine how patterns in interaction strength as I have described change the quasi sign-stability of the networks. 
 
-```{r qssSCALED, cache = TRUE}
+```{r qssSCALED, cache = FALSE}
 system.time(
 qss4.2 <- qssSCALED(fournode.am)
 )#188 sec
@@ -658,8 +681,9 @@ What comes out of this is that the networks with scaled interaction strengths ar
 qssDAT <- data.frame(size = factor(c(rep("4-node", length(qss4)),rep("5-node", length(qss5)),rep("10-node", length(qss10))), 
                          levels = c("4-node", "5-node", "10-node")),
            qss1 = c(qss4, qss5, qss10),
-           qss2 = c(qss4.2[[1]], qss5.2[[1]], qss10.2[[1]]),
-           qss3 = c(qss4.2[[2]], qss5.2[[2]], qss10.2[[2]])
+           qss2 = c(qss4.2$orig, qss5.2$orig, qss10.2$orig),
+           qss2.n1 = c(qss4.2$null1, qss5.2$null1, qss10.2$null1)
+           qss2.n2 = c(qss4.2$null2, qss5.2$null2, qss10.2$null2)
            )
 
 ggplot(qssDAT, aes(x = qss1, y = qss2)) + geom_point(aes(color = size)) + geom_abline(intercept = 0, slope = 1) + theme_bw()
@@ -669,7 +693,12 @@ ggplot(qssDAT, aes(x = qss1, y = qss2)) + geom_point(aes(color = size)) + geom_a
 Comparing the scaled QSS to the QSS determined previously is, unfortunately using the wrong null model. I need to compare the QSS determined above to QSS calculated based on networks with the same distributions of link strengths. In other words the above result could simply be an artifact of comparing matrices with lower average interaction strength to those with higher interaction strength. As May noted, interaction strength (along with size and connectance, both of which are controlled for in this comparision) is an important factor in the stability of random matrices. Instead I can compare matrices that are filled according to the rules above, to a randomized version. The randomized version takes the paired values in the filled matrix and switches which interaction they are assigned to. Eigenvalues are then determined for the randomized matrix the same as the regular matrix.  
 
 ```{r}
-ggplot(qssDAT, aes(x = qss3, y = qss2)) + geom_point(aes(color = size)) + geom_abline(intercept = 0, slope = 1) + theme_bw()
+ggplot(qssDAT, aes(x = qss2.n1, y = qss2)) + geom_point(aes(color = size)) + geom_abline(intercept = 0, slope = 1) + theme_bw()
 
 ```
 
+
+```{r}
+ggplot(qssDAT, aes(x = qss2.n2, y = qss2)) + geom_point(aes(color = size)) + geom_abline(intercept = 0, slope = 1) + theme_bw()
+
+```

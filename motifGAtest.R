@@ -4,6 +4,7 @@ library(pheatmap)
 library(compiler)
 library(ggplot2)
 library(reshape2)
+library(data.table)
 
 motif_counter <- function(graph.lists){
   require(igraph)
@@ -88,8 +89,25 @@ swap_links <- function(mat, s){
   return(mat)
 }
 
+swap_values <- function(mat){
+  new.mat <- mat
+  d <- diag(mat)
+  diag(new.mat) <- 0
+  
+  pos <- which(new.mat > 0)
+  neg <- which(new.mat < 0)
+  
+  new.mat[pos] <- mat[sample(pos)]
+  new.mat[neg] <- mat[sample(neg)]
+  
+  diag(new.mat) <- d
+  
+  return(new.mat)
+}
+
 spec.cmp <- cmpfun(spec)
 swap_links.cmp <- cmpfun(swap_links)
+swap_values.cmp <- cmpfun(swap_values)
 
 rev.conv <- function(erg.fill){
   return(apply(erg.fill, c(1,2), function(x){if(x > 0){x <- 1}else if(x < 0){x <- 0}else{x <- 0}}))
@@ -128,11 +146,37 @@ eigenTRACE <- function(x, erg.fill){
   return(list(time = time, eigen = erg.ei, motif = as.matrix(mo), links = links))
 }
 
-init_cond <- function(x){
+eigenTRACE.v2 <- function(x, erg.fill){
+  time <- 0
+  erg.ei <- maxRE(erg.fill)
+  erg.list <- list(erg.fill)
+  for(i in 1:x){
+    # Swap values
+    erg.perm <- swap_values.cmp(erg.fill)
+    # Get eigenvalue
+    ei <- maxRE(erg.perm)
+    
+    # Check condition, and keep matrix that is better
+    if(ei < tail(erg.ei, 1)){
+      erg.fill <- erg.perm
+      # keep eigenvalue
+      erg.ei <- c(erg.ei, ei)
+      
+      # what iteration are we at
+      time <- c(time, i) 
+      
+      # save the matrix
+      erg.list[[length(erg.list)+1]] <- erg.fill
+    }
+  }
+  return(list(ergs = erg.list, eigens = erg.ei, time = time))
+}
+
+init_cond <- function(x, S = 10, C = 0.2){
   require(igraph)
   connect <- FALSE
   while(!connect){
-    erg.g <- erdos.renyi.game(10, .2, "gnp", directed = TRUE)
+    erg.g <- erdos.renyi.game(S, C, "gnp", directed = TRUE)
     connect <- is.connected(erg.g)
   }
   
@@ -149,59 +193,114 @@ init_cond <- function(x){
   return(filled)
 }
 
-####
-Get the lowest leading eigenvalue
-####
-erg <- init_cond(1000)
-
-system.time(
-sim.results <- lapply(erg, eigenTRACE, x = 1000)
-)
-# 458 for 1000, 1000, 10sp .2C
-
-times <- sapply(sim.results, "[[", 1) 
-eigens <- sapply(sim.results, "[[", 2)
-motifs <- sapply(sim.results, "[[",3)
-links <- sapply(sim.results, "[[", 4)
-
-plot(times[[1]], eigens[[1]], xlim = c(0, 1000), ylim = c(0, 15))
-for(i in 2:1000){
-  points(times[[i]], eigens[[i]])
+link_structure <- function(motMATS){
+  mots <- length(motMATS)
+  # mots is how many networks there are
+  
+  class1 <- list()
+  class2 <- list()
+  class3 <- list()
+  for(n in 1:mots){
+    mat <- motMATS[[n]]
+    diag(mat) <- 0
+    mo1 <- unlist(motif_counter(list(graph.adjacency(mat))))
+    t1 <- which(motMATS[[n]] > 0)
+    tst.lst <- list()
+    for(i in 1:length(t1)){
+      t2 <- motMATS[[n]]
+      t2[t1[i]] <- 0
+      tst.lst[[i]] <- t2
+    }
+    gr <- lapply(tst.lst, graph.adjacency)
+    mo <- as.matrix(motif_counter(gr))
+    diff1 <- t(apply(mo, 1, function(x){x - mo1}))
+    participation <- apply(diff1, c(1,2), function(x){if(x > 0){x <- 0}else if(x < 0){x <- x*-1}else{x <- 0}})
+    
+    with.unst <- apply(participation, 1, function(x){sum(x[3], x[6:13]) > 0})
+    st <- apply(participation, 1, function(x){sum(x[1], x[4], x[5]) > 0})
+    intr <- apply(participation, 1, function(x){x[2] > 0})
+    
+    class1[[n]] <- which(st & !with.unst & !intr)
+    class2[[n]] <- which(st & !with.unst & intr)
+    class3[[n]] <- which(with.unst)
+  }
+  return(list(very = class1, mod = class2, unst = class3))
 }
 
-motifs
-boxplot(do.call(rbind, lapply(motifs, tail, 1)))
 
-ggplot(melt(do.call(rbind, lapply(motifs, tail, 1))), aes(x = Var2, y = value)) + geom_point(position ="jitter", alpha = .15) + stat_summary(fun.y = "mean", fun.ymin = function(x){quantile(x, prob = .025)}, fun.ymax = function(x){quantile(x, prob = .975)}, geom = "errorbar", col = "darkgreen", lwd = 1.5) + stat_summary(fun.y = "mean", geom = "point", col = "darkgreen", size = 5) + theme_bw()
+classify <- function(fm, l1){
+  m <- matrix(0, nrow(fm), ncol(fm))
+  m[which(fm > 0)][l1$very] <- "VERY"
+  m[which(fm > 0)][l1$mod] <- "MOD"
+  m[which(fm > 0)][l1$unst] <- "UNST"
+  
+  df <- data.frame(a.ij = factor(m[upper.tri(m)], levels = c("0", "MOD", "UNST", "VERY")),
+                   a.ji = factor(t(m)[upper.tri(m)], levels = c("0", "MOD", "UNST", "VERY")))
+  
+  df2 <- factor(levels = c("0", "MOD", "UNST", "VERY"))
+  for(i in 1:nrow(df)){
+    if(df$a.ij[i] == 0 & df$a.ji[i] != 0){
+      df2[i] <- factor(df$a.ji[i], levels = c("0", "MOD", "UNST", "VERY"))
+    }else if(df$a.ij[i] != 0 & df$a.ji[i] == 0){
+      df2[i] <- factor(df$a.ij[i], levels = c("0", "MOD", "UNST", "VERY"))
+    }else if(df$a.ij[i] != 0 & df$a.ji[i] != 0 & df$a.ij[i] == df$a.ji[i]){
+      df2[i] <- factor(df$a.ij[i], levels = c("0", "MOD", "UNST", "VERY"))
+    }else{df2[i] <- factor(0, levels = c("0", "MOD", "UNST", "VERY"))}
+  }
+  return(df2)
+}
 
-#meanMOT <- matrix(nrow = max(sapply(times, length)), ncol = 13)
-#meanEIG <- c()
-#for(i in 1:max(sapply(times, length))){
-#  timestep.mot <- do.call(rbind, lapply(motifs, function(x){if(i <= nrow(x)){x[i,]}else{NA}}))
-#  timestep.eig <- do.call(rbind, lapply(eigens, function(x){if(i <= length(x)){x[i]}else{NA}}))
-#  meanMOT[i,] <- colMeans(timestep.mot, na.rm = T)
-#  meanEIG[i] <- mean(timestep.eig, na.rm = T)
-#}
+####
+# Get the lowest leading eigenvalue
+####
+n.web = 100
+mag.class <- list()
+for(i in 1:1000){  
+  erg <- init_cond(n.web)
+  
+  #system.time(
+  sim.results <- lapply(erg, eigenTRACE.v2, x = 2000)
+  #)
+  # 458 for 1000, 1000, 10sp .2C
+  
+  # Get all matrices
+  allmats <- sapply(sim.results, "[[", 1) 
+  # Get eigenvalues for each matrix
+  eigens <- sapply(sim.results, "[[", 2)
+  # Get time stamp
+  times <- sapply(sim.results, "[[",3)
+  
+  # Get final matrix structure
+  fin.mats <- unlist(lapply(allmats, tail, 1), recursive = F) 
+  lstr <- link_structure(fin.mats)
+  
+  pairs <- lapply(allmats, function(x){lapply(x, function(z){data.frame(aij = z[upper.tri(z)], aji = t(z)[upper.tri(z)])})})
+  allpair <- rbindlist(unlist(lapply(pairs, function(x){tail(x, 1)}), recursive = F))
+  
+  d.all <- list()
+  for(x in 1:n.web){
+    class.l <- list(very = lstr$very[[x]], mod = lstr$mod[[x]], unst = lstr$unst[[x]])
+    d.all[[x]] <- classify(fin.mats[[x]], class.l)
+    #print(x)
+  }
+  
+  mag.class[[i]] <- cbind(allpair, class = factor(unlist(d.all), levels = c("0", "UNST", "MOD", "VERY")))
+  
+  print(i)
+}
 
-#pheatmap(meanMOT, cluster_rows = F, cluster_cols = F)
 
-last.struct <- do.call(rbind, lapply(motifs, tail, 1))
-lower <- apply(last.struct, 2, quantile, prob = .025)
-lower2 <- apply(do.call(rbind, lapply(motifs, tail, 1)), 2, quantile, prob = .025)
-upper <- apply(last.struct, 2, quantile, prob = .975)
-upper2 <- apply(do.call(rbind, lapply(motifs, tail, 1)), 2, quantile, prob = .975)
+mag.class.r <- rbindlist(mag.class)
 
-final.struct <- melt(do.call(rbind, lapply(motifs, tail, 1)))
+mmag <- melt(mag.class.r)
+mmag$sign <- NA
+mmag$sign[which(mmag$value < 0)] <- "neg"
+mmag$sign[which(mmag$value > 0)] <- "pos"
+mmag$sign[which(mmag$value == 0)] <- "zero"
 
-sub.names <- c("s1", "s2", "s3", "s4", "s5", "d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8")
-df <- data.frame(Subgraph = factor(names(lower), levels = sub.names), 
-                 means = colMeans(last.struct), 
-                 means2 = colMeans(do.call(rbind, lapply(motifs, tail, 1))), 
-                 upper, upper2, 
-                 lower, lower2)
+mmag <- mmag[which(mmag$sign != "zero" & mmag$sign == "pos" & mmag$class != 0)]
 
-df2 <- data.frame(trial = rep(1:2, each = 13), Subgraph = rep(df$Subgraph, 2) ,
-                  mean = c(df$means, df$means2), upper = c(df$upper, df$upper2), 
-                  lower = c(df$lower, df$lower2))
-ggplot(df2, aes(x = Subgraph, y = mean, fill = factor(trial))) + geom_point(stat = "identity", position = "dodge") + geom_errorbar(aes(ymax = upper, ymin = lower), position = "dodge") + theme_bw()
+ggplot(mmag, aes(x = value, y = ..density..)) + geom_density(alpha = .5, aes(fill = class)) + facet_grid(class~sign)
+ggsave("C:/Users/jjborrelli/Dropbox/distros.jpg", width = 5, height = 5)
 
+aggregate(mmag$value, list(mmag$class, mmag$sign), function(x){c(median(x), sd(x))})
