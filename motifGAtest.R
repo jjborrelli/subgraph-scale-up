@@ -38,7 +38,7 @@ conversion <- function(tm){
 
 ran.unif <- function(motmat){
   newmat <- apply(motmat, c(1,2), function(x){
-    if(x==1){runif(1, 0, 10)}else if(x==-1){runif(1, -1, 0)} else{0}
+    if(x==1){rbeta(1, 2, 5)*10}else if(x==-1){runif(1, -1, 0)} else{0}
   })
   diag(newmat) <- runif(nrow(newmat), -1, 0)
   return(newmat)
@@ -253,10 +253,10 @@ classify <- function(fm, l1){
 ####
 # Get the lowest leading eigenvalue
 ####
-n.web = 100
+n.web = 10
 mag.class <- list()
-for(i in 1:1000){  
-  erg <- init_cond(n.web)
+for(i in 1:10){  
+  erg <- init_cond(n.web, S = 150, C = .1)
   
   #system.time(
   sim.results <- lapply(erg, eigenTRACE.v2, x = 2000)
@@ -301,6 +301,6 @@ mmag$sign[which(mmag$value == 0)] <- "zero"
 mmag <- mmag[which(mmag$sign != "zero" & mmag$sign == "pos" & mmag$class != 0)]
 
 ggplot(mmag, aes(x = value, y = ..density..)) + geom_density(alpha = .5, aes(fill = class)) + facet_grid(class~sign)
-ggsave("C:/Users/jjborrelli/Dropbox/distros.jpg", width = 5, height = 5)
+ggsave("C:/Users/jjborrelli/Dropbox/distros3.jpg", width = 5, height = 5)
 
-aggregate(mmag$value, list(mmag$class, mmag$sign), function(x){c(median(x), sd(x))})
+aggregate(mmag$value, list(mmag$class, mmag$sign), function(x){c(mean(x), median(x), sd(x))})
