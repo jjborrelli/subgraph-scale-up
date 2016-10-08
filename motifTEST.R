@@ -164,7 +164,7 @@ x2end-x2
 x0 <- Sys.time()
 
 allpar0 <- lapply(1:250, function(x){
-  xi <- (((10^2)^tind[[x]]$TL)/100)^0.25*0.314
+  xi <- (((10^2)^tind[[x]]$TL)/100)^-0.25*0.314
   ri <- colSums(adjs[[x]]) == 0
   
   par <- list(K = 1, x.i = xi, yij = 8, eij = 0.85, xpar = 0, 
@@ -173,7 +173,7 @@ allpar0 <- lapply(1:250, function(x){
 
 dyna0 <- list()
 for(i in 1:250){
-  dyna0[[i]] <- ode(y = states1[[i]], times = 1:2000, func = CRmod, parms = allpar0[[i]],
+  dyna0[[i]] <- ode(y = states1[i,], times = 1:2000, func = CRmod, parms = allpar0[[i]],
                    events = list(func = ext1, time = 1:2000))
   cat(i, "--- ")
 }
@@ -185,7 +185,7 @@ x0end-x0
 x1 <- Sys.time()
 
 allpar1 <- lapply(1:250, function(x){
-  xi <- (((10^2)^tind[[x]]$TL)/100)^0.25*0.314
+  xi <- (((10^2)^tind[[x]]$TL)/100)^-0.25*0.314
   ri <- colSums(adjs[[x]]) == 0
   
   par <- list(K = 1, x.i = xi, yij = 8, eij = 0.85, xpar = 1, 
@@ -194,7 +194,7 @@ allpar1 <- lapply(1:250, function(x){
 
 dyna1 <- lapply(1:250, function(x) matrix(NA, nrow = 2000, ncol = 51))
 for(i in 1:250){
-  dyna1[[i]] <- ode(y = states1[[i]], times = 1:2000, func = CRmod, parms = allpar1[[i]],
+  dyna1[[i]] <- ode(y = states1[i,], times = 1:2000, func = CRmod, parms = allpar1[[i]],
                    events = list(func = ext1, time = 1:2000), atol = 0)
   cat(i, "--- ")
 }
